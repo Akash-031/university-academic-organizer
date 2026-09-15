@@ -29,6 +29,24 @@ export async function loginApi({ email, password }) {
   return handle(res, 'Failed to log in');
 }
 
+export async function requestPasswordResetApi(email) {
+  const res = await fetch(`${API_BASE}/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  return handle(res, 'Unable to request a password reset');
+}
+
+export async function resetPasswordApi({ token, password, confirmPassword }) {
+  const res = await fetch(`${API_BASE}/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, password, confirmPassword }),
+  });
+  return handle(res, 'Unable to reset password');
+}
+
 export async function logoutApi() {
   const res = await fetch(`${API_BASE}/auth/logout`, {
     method: 'POST',

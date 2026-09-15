@@ -5,7 +5,7 @@ import cookieParser from 'cookie-parser';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createAcademicRepository } from './repositories/academicRepository.js';
-import { createAuthRepository } from './repositories/authRepository.js';
+import { createAuthRepository, PASSWORD_MIN_LENGTH } from './repositories/authRepository.js';
 import { createRoomRepository } from './repositories/roomRepository.js';
 import { signAuthToken, setAuthCookie, clearAuthCookie, requireAuth } from './auth.js';
 
@@ -19,9 +19,16 @@ const PORT = Number(process.env.PORT) || 5000;
 // Windows Firewall/VPN/AV on local machines, so local dev defaults to loopback-only instead.
 const HOST = process.env.HOST || (process.env.RENDER || process.env.PORT ? '0.0.0.0' : '127.0.0.1');
 
+const DEFAULT_ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:5173',
+  'https://university-academic-organizer.onrender.com',
+];
+
 const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
-  : ['http://localhost:3000', 'http://localhost:5173'];
+  ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean)
+  : DEFAULT_ALLOWED_ORIGINS;
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -52,6 +59,25 @@ function roomRepository() {
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const RESET_REQUEST_WINDOW_MS = 60 * 60 * 1000;
+const RESET_REQUEST_LIMIT = 5;
+const resetRequestAttempts = new Map();
+
+function isResetRequestRateLimited(key) {
+  const now = Date.now();
+  const recentAttempts = (resetRequestAttempts.get(key) || []).filter(timestamp => now - timestamp < RESET_REQUEST_WINDOW_MS);
+  if (recentAttempts.length >= RESET_REQUEST_LIMIT) {
+    resetRequestAttempts.set(key, recentAttempts);
+    return true;
+  }
+  recentAttempts.push(now);
+  resetRequestAttempts.set(key, recentAttempts);
+  return false;
+}
+
+const GENERIC_RESET_RESPONSE = {
+  message: 'If an account exists for that email, a password reset link has been sent.',
+};
 
 function sendDatabaseError(res, error, operation) {
   console.error(`${operation}:`, error);
@@ -214,8 +240,8 @@ app.post('/api/auth/register', async (req, res) => {
     if (!email || !EMAIL_REGEX.test(email.trim())) {
       return res.status(400).json({ error: 'A valid email is required' });
     }
-    if (!password || password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    if (!password || password.length < PASSWORD_MIN_LENGTH) {
+      return res.status(400).json({ error: `Password must be at least ${PASSWORD_MIN_LENGTH} characters` });
     }
 
     const user = await authRepository().register({ name, email, password });
@@ -247,6 +273,48 @@ app.post('/api/auth/login', async (req, res) => {
     res.json({ user });
   } catch (error) {
     sendDatabaseError(res, error, 'log in');
+  }
+});
+
+app.post('/api/auth/forgot-password', async (req, res) => {
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  const rateLimitKey = `${req.ip}:${email}`;
+
+  if (!email || !EMAIL_REGEX.test(email) || isResetRequestRateLimited(rateLimitKey)) {
+    res.json(GENERIC_RESET_RESPONSE);
+    return;
+  }
+
+  try {
+    await authRepository().requestPasswordReset(email);
+  } catch (error) {
+    console.error('Password reset request failed:', error.message);
+  }
+
+  res.json(GENERIC_RESET_RESPONSE);
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  const { token, password, confirmPassword } = req.body || {};
+  if (typeof token !== 'string' || !token || typeof password !== 'string' || password.length < PASSWORD_MIN_LENGTH) {
+    res.status(400).json({ error: `Password must be at least ${PASSWORD_MIN_LENGTH} characters and the reset link must be valid` });
+    return;
+  }
+  if (password !== confirmPassword) {
+    res.status(400).json({ error: 'Passwords do not match' });
+    return;
+  }
+
+  try {
+    await authRepository().resetPassword(token, password);
+    res.json({ message: 'Password reset successfully' });
+  } catch (error) {
+    if (error.code === 'INVALID_RESET_TOKEN') {
+      res.status(400).json({ error: 'This password reset link is invalid or expired' });
+      return;
+    }
+    console.error('Password reset failed:', error.message);
+    res.status(500).json({ error: 'Unable to reset password right now' });
   }
 });
 

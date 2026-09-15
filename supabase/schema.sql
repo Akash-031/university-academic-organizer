@@ -1,5 +1,5 @@
 -- Run this script in the Supabase SQL Editor before enabling the new backend.
--- Data remains unauthenticated in this phase; the server uses the service-role key.
+-- Data remains unauthenticated in this phase; the server uses a server-side Supabase key.
 
 CREATE TABLE IF NOT EXISTS public.courses (
   id TEXT PRIMARY KEY,
@@ -95,3 +95,16 @@ CREATE INDEX IF NOT EXISTS rooms_owner_id_idx ON public.rooms(owner_id);
 CREATE INDEX IF NOT EXISTS rooms_room_code_idx ON public.rooms(room_code);
 CREATE INDEX IF NOT EXISTS room_members_room_id_idx ON public.room_members(room_id);
 CREATE INDEX IF NOT EXISTS room_members_user_id_idx ON public.room_members(user_id);
+
+-- Password reset tokens are stored as hashes and are invalidated after use.
+CREATE TABLE IF NOT EXISTS public.password_reset_tokens (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  token_hash TEXT UNIQUE NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS password_reset_tokens_user_id_idx ON public.password_reset_tokens(user_id);
+CREATE INDEX IF NOT EXISTS password_reset_tokens_expires_at_idx ON public.password_reset_tokens(expires_at);
