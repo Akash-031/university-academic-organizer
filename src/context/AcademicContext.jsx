@@ -24,7 +24,7 @@ const STORAGE_KEYS = {
   MATERIALS: 'uao_user_materials_v2',
   TASKS: 'uao_user_tasks_v2',
   UNI_INFO: 'uao_user_uni_info_v2',
-  MIGRATED: 'uao_data_migrated_v1'
+  MIGRATED: 'uao_data_migrated_v2'
 };
 
 const COURSE_COLORS = ['blue', 'purple', 'emerald', 'amber', 'cyan', 'rose', 'indigo'];

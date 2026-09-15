@@ -25,6 +25,59 @@ npm run build
 
 ---
 
+## Production Deployment
+
+This project is ready for a unified Node.js deployment: Vite builds the React application into `dist/`, then Express serves the built frontend and the existing `/api/*` endpoints from the same origin. This keeps the browser on the deployed app URL and prevents the Supabase service-role key from reaching frontend code.
+
+### Build and start
+
+```bash
+npm ci
+npm run build
+npm start
+```
+
+`npm start` runs `node server/index.js`. The hosting platform must provide `PORT`; the local fallback is `5000`. Do not run `vite preview` in production.
+
+### Backend environment variables
+
+Configure these only in the Node/Express service's environment settings or an ignored root `.env` file for local development:
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `SUPABASE_URL` | Yes | Supabase project URL. Server-only. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Supabase service-role key. Secret and server-only. Never use a `VITE_` prefix. |
+| `PORT` | Hosting platform | HTTP port assigned by the platform; defaults to `5000` locally. |
+| `ALLOWED_ORIGINS` | Yes for deployed browsers | Comma-separated browser origins, such as `https://your-app-domain.example`. Include `http://localhost:3000` and `http://localhost:5173` for local development. |
+| `NODE_ENV` | Recommended | Set to `production` on the hosted service. |
+
+### Frontend API URL
+
+The frontend reads the public, build-time variable `VITE_API_BASE_URL`.
+
+- **Unified deployment (recommended):** leave it empty. Requests use same-origin `/api`, served by Express.
+- **Separate frontend deployment:** set it during the frontend build to the backend origin, for example `https://your-api-domain.example`. Do not include `/api` because the client adds it.
+
+Only `VITE_API_BASE_URL` is safe for frontend use. Every `VITE_*` variable is embedded in the browser build, so never place Supabase credentials in one.
+
+### CORS
+
+`ALLOWED_ORIGINS` controls browser origins accepted by Express. Use comma-separated origins with no trailing slash:
+
+```env
+ALLOWED_ORIGINS=https://your-app-domain.example,http://localhost:3000,http://localhost:5173
+```
+
+For a unified deployment, set it to the public app origin. The backend still accepts requests without an `Origin` header for platform checks and non-browser clients.
+
+### Deployment Recommendation
+
+Use **Render** for the first deployment: it supports a single Node web service with a build command (`npm run build`), start command (`npm start`), managed environment variables, and a stable public URL. This project does not require separate frontend and backend services because Express already serves `dist/`.
+
+Before creating the service, commit the source changes only, confirm the root `.env` remains ignored, and set the backend variables in Render's dashboard. Do not upload or commit `.env`, `server/database.db`, or Supabase credentials. The existing SQLite files remain local reference artifacts; production data is served through Supabase.
+
+---
+
 ## 🌟 Core Features Implemented
 
 ### 1. 📊 Academic Dashboard

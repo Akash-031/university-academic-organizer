@@ -1,10 +1,28 @@
-import React from 'react';
-import { Menu, Plus, FolderPlus, GraduationCap } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Menu, Plus, FolderPlus, GraduationCap, LogOut, ChevronDown } from 'lucide-react';
 import { useAcademic } from '../context/AcademicContext';
+import { useAuth } from '../context/AuthContext';
 import SearchBar from './SearchBar';
 
 export default function Navbar({ onOpenMobileSidebar }) {
-  const { openAddCourseModal, openAddMaterialModal, courses } = useAcademic();
+  const { openAddCourseModal, openAddMaterialModal } = useAcademic();
+  const { user, logout } = useAuth();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setIsMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const initials = user?.name
+    ? user.name.trim().split(/\s+/).map(part => part[0]).slice(0, 2).join('').toUpperCase()
+    : '?';
 
   return (
     <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200">
@@ -52,6 +70,39 @@ export default function Navbar({ onOpenMobileSidebar }) {
             <span className="hidden md:inline">Add Material</span>
             <span className="md:hidden">Add</span>
           </button>
+
+          {/* User account area */}
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setIsMenuOpen(prev => !prev)}
+              className="flex items-center gap-1.5 pl-1.5 pr-2 py-1.5 rounded-xl hover:bg-slate-100 transition-colors"
+              aria-label="Account menu"
+            >
+              <div className="w-7 h-7 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[11px] font-bold shrink-0">
+                {initials}
+              </div>
+              <span className="hidden sm:inline text-xs font-semibold text-slate-700 max-w-[100px] truncate">
+                {user?.name}
+              </span>
+              <ChevronDown className="hidden sm:block w-3.5 h-3.5 text-slate-400" />
+            </button>
+
+            {isMenuOpen && (
+              <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl border border-slate-200 shadow-lg py-1.5 z-40">
+                <div className="px-3.5 py-2 border-b border-slate-100">
+                  <p className="text-xs font-bold text-slate-800 truncate">{user?.name}</p>
+                  <p className="text-[11px] text-slate-500 truncate">{user?.email}</p>
+                </div>
+                <button
+                  onClick={logout}
+                  className="w-full flex items-center gap-2 px-3.5 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Log Out</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </header>

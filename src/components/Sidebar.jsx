@@ -12,6 +12,7 @@ import {
   GraduationCap,
   FolderPlus,
   Calendar,
+  Users,
   X
 } from 'lucide-react';
 import { useAcademic } from '../context/AcademicContext';
@@ -55,6 +56,7 @@ export default function Sidebar({ isOpen, onClose }) {
       icon: HelpCircle,
       badge: materials.filter(m => m.type === 'question').length
     },
+    { to: '/rooms', label: 'My Rooms', icon: Users },
     { to: '/settings', label: 'Settings', icon: Settings },
   ];
 
