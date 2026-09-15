@@ -14,9 +14,10 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const app = express();
-const PORT = process.env.PORT || 5000;
-// 0.0.0.0 can be silently torn down by Windows Firewall/VPN/AV on some machines; localhost-only is what dev actually needs.
-const HOST = process.env.HOST || '127.0.0.1';
+const PORT = Number(process.env.PORT) || 5000;
+// Render (and similar hosts) require binding to 0.0.0.0; 0.0.0.0 can be silently torn down by
+// Windows Firewall/VPN/AV on local machines, so local dev defaults to loopback-only instead.
+const HOST = process.env.HOST || (process.env.RENDER || process.env.PORT ? '0.0.0.0' : '127.0.0.1');
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
