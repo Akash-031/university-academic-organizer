@@ -5,9 +5,12 @@ import {
   BookOpen, FileText, CalendarDays, ShieldCheck
 } from 'lucide-react';
 import { fetchRoomApi, fetchRoomMembersApi } from '../services/roomApi';
+import { useAcademic } from '../context/AcademicContext';
+import CourseCard from '../components/CourseCard';
 
 export default function RoomDashboard() {
   const { roomId } = useParams();
+  const { courses, openAddCourseModal, isLoading: isAcademicLoading } = useAcademic();
   const [room, setRoom] = useState(null);
   const [role, setRole] = useState(null);
   const [members, setMembers] = useState([]);
@@ -127,34 +130,33 @@ export default function RoomDashboard() {
       </div>
 
       {/* Placeholder sections for future phase */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5">
-          <div className="flex items-center gap-2 mb-2">
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-blue-600" />
-            <h3 className="text-sm font-bold text-slate-900">Courses</h3>
+            <h2 className="text-base font-bold text-slate-900">Room Courses</h2>
           </div>
-          <p className="text-xs text-slate-500">
-            Shared room courses are coming soon. Use the main <Link to="/courses" className="font-bold text-blue-600">Courses</Link> section for now.
-          </p>
+          <button
+            onClick={openAddCourseModal}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors"
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span>+ Add Course</span>
+          </button>
         </div>
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5">
-          <div className="flex items-center gap-2 mb-2">
-            <FileText className="w-5 h-5 text-blue-600" />
-            <h3 className="text-sm font-bold text-slate-900">Materials</h3>
+        {isAcademicLoading ? (
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-8 text-center text-xs text-slate-500">
+            Loading shared courses...
           </div>
-          <p className="text-xs text-slate-500">
-            Shared room materials are coming soon. Use the main <Link to="/slides" className="font-bold text-blue-600">Materials</Link> sections for now.
-          </p>
-        </div>
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5">
-          <div className="flex items-center gap-2 mb-2">
-            <CalendarDays className="w-5 h-5 text-blue-600" />
-            <h3 className="text-sm font-bold text-slate-900">Tasks / Deadlines</h3>
+        ) : courses.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-8 text-center">
+            <p className="text-xs text-slate-500">No shared courses have been added to this Room yet.</p>
           </div>
-          <p className="text-xs text-slate-500">
-            Shared room tasks are coming soon. Use the main <Link to="/calendar" className="font-bold text-blue-600">Tasks & Deadlines</Link> section for now.
-          </p>
-        </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {courses.map(course => <CourseCard key={course.id} course={course} roomId={roomId} />)}
+          </div>
+        )}
       </div>
     </div>
   );

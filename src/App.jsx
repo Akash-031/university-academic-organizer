@@ -55,6 +55,7 @@ function AppShell() {
               <Route path="/calendar" element={<CalendarTasks />} />
               <Route path="/rooms" element={<MyRooms />} />
               <Route path="/rooms/:roomId" element={<RoomDashboard />} />
+                            <Route path="/rooms/:roomId/courses/:courseId" element={<CourseDetails />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

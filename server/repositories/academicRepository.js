@@ -9,6 +9,7 @@ function throwIfError(error, operation) {
 function toCourse(row) {
   return row && {
     id: row.id,
+    roomId: row.room_id || null,
     name: row.name,
     code: row.code,
     teacher: row.teacher,
@@ -113,18 +114,79 @@ function taskRecord(task) {
 export function createAcademicRepository() {
   const supabase = getSupabaseClient();
 
+  async function requireRoomMember(roomId, userId) {
+    const result = await supabase
+      .from('room_members')
+      .select('role')
+      .eq('room_id', roomId)
+      .eq('user_id', userId)
+      .maybeSingle();
+    throwIfError(result.error, 'checking room membership');
+    if (!result.data) {
+      const error = new Error('You are not a member of this room');
+      error.code = 'ROOM_FORBIDDEN';
+      throw error;
+    }
+    return result.data.role;
+  }
+
+  async function getRoomCourse(roomId, courseId) {
+    const result = await supabase.from('courses').select('*').eq('id', courseId).eq('room_id', roomId).maybeSingle();
+    throwIfError(result.error, 'finding room course');
+    return result.data;
+  }
+
+  async function requireRoomCourse(roomId, courseId, userId) {
+    await requireRoomMember(roomId, userId);
+    const course = await getRoomCourse(roomId, courseId);
+    if (!course) {
+      const error = new Error('Room course not found');
+      error.code = 'ROOM_COURSE_NOT_FOUND';
+      throw error;
+    }
+    return course;
+  }
+
+  async function getGlobalCourseIds() {
+    const result = await supabase.from('courses').select('id').is('room_id', null);
+    throwIfError(result.error, 'finding global courses');
+    return result.data.map(course => course.id);
+  }
+
+  async function getRoomCourseIds(roomId) {
+    const result = await supabase.from('courses').select('id').eq('room_id', roomId);
+    throwIfError(result.error, 'finding room courses');
+    return result.data.map(course => course.id);
+  }
+
+  async function requireGlobalCourse(courseId) {
+    const result = await supabase.from('courses').select('*').eq('id', courseId).is('room_id', null).maybeSingle();
+    throwIfError(result.error, 'finding global course');
+    if (!result.data) {
+      const error = new Error('Course not found');
+      error.code = 'COURSE_NOT_FOUND';
+      throw error;
+    }
+    return result.data;
+  }
+
   return {
     async getAll() {
-      const [coursesResult, materialsResult, tasksResult, uniInfoResult] = await Promise.all([
-        supabase.from('courses').select('*').order('created_at', { ascending: false }),
-        supabase.from('materials').select('*').order('upload_date', { ascending: false }),
-        supabase.from('tasks').select('*').order('created_at', { ascending: false }),
+      const [coursesResult, uniInfoResult] = await Promise.all([
+        supabase.from('courses').select('*').is('room_id', null).order('created_at', { ascending: false }),
         supabase.from('uni_info').select('*').eq('id', 'main').maybeSingle(),
       ]);
       throwIfError(coursesResult.error, 'fetching courses');
+      throwIfError(uniInfoResult.error, 'fetching university information');
+      const courseIds = coursesResult.data.map(course => course.id);
+      const [materialsResult, tasksResult] = courseIds.length === 0
+        ? [{ data: [], error: null }, { data: [], error: null }]
+        : await Promise.all([
+          supabase.from('materials').select('*').in('course_id', courseIds).order('upload_date', { ascending: false }),
+          supabase.from('tasks').select('*').in('course_id', courseIds).order('created_at', { ascending: false }),
+        ]);
       throwIfError(materialsResult.error, 'fetching materials');
       throwIfError(tasksResult.error, 'fetching tasks');
-      throwIfError(uniInfoResult.error, 'fetching university information');
       return {
         courses: coursesResult.data.map(toCourse),
         materials: materialsResult.data.map(toMaterial),
@@ -134,7 +196,7 @@ export function createAcademicRepository() {
     },
 
     async getCourses() {
-      const result = await supabase.from('courses').select('*').order('created_at', { ascending: false });
+      const result = await supabase.from('courses').select('*').is('room_id', null).order('created_at', { ascending: false });
       throwIfError(result.error, 'fetching courses');
       return result.data.map(toCourse);
     },
@@ -146,7 +208,7 @@ export function createAcademicRepository() {
     },
 
     async updateCourse(id, course) {
-      const existingResult = await supabase.from('courses').select('*').eq('id', id).maybeSingle();
+      const existingResult = await supabase.from('courses').select('*').eq('id', id).is('room_id', null).maybeSingle();
       throwIfError(existingResult.error, 'finding course');
       if (!existingResult.data) return null;
 
@@ -157,52 +219,65 @@ export function createAcademicRepository() {
     },
 
     async deleteCourse(id) {
-      const result = await supabase.from('courses').delete().eq('id', id);
+      const result = await supabase.from('courses').delete().eq('id', id).is('room_id', null);
       throwIfError(result.error, 'deleting course');
     },
 
     async getMaterials() {
-      const result = await supabase.from('materials').select('*').order('upload_date', { ascending: false });
+      const courseIds = await getGlobalCourseIds();
+      if (courseIds.length === 0) return [];
+      const result = await supabase.from('materials').select('*').in('course_id', courseIds).order('upload_date', { ascending: false });
       throwIfError(result.error, 'fetching materials');
       return result.data.map(toMaterial);
     },
 
     async createMaterial(material) {
+      await requireGlobalCourse(material.courseId);
       const result = await supabase.from('materials').insert(materialRecord(material)).select().single();
       throwIfError(result.error, 'creating material');
       return toMaterial(result.data);
     },
 
     async deleteMaterial(id) {
-      const result = await supabase.from('materials').delete().eq('id', id);
+      const courseIds = await getGlobalCourseIds();
+      if (courseIds.length === 0) return;
+      const result = await supabase.from('materials').delete().eq('id', id).in('course_id', courseIds);
       throwIfError(result.error, 'deleting material');
     },
 
     async getTasks() {
-      const result = await supabase.from('tasks').select('*').order('created_at', { ascending: false });
+      const courseIds = await getGlobalCourseIds();
+      if (courseIds.length === 0) return [];
+      const result = await supabase.from('tasks').select('*').in('course_id', courseIds).order('created_at', { ascending: false });
       throwIfError(result.error, 'fetching tasks');
       return result.data.map(toTask);
     },
 
     async createTask(task) {
+      await requireGlobalCourse(task.courseId);
       const result = await supabase.from('tasks').insert(taskRecord(task)).select().single();
       throwIfError(result.error, 'creating task');
       return toTask(result.data);
     },
 
     async updateTask(id, updates) {
-      const existingResult = await supabase.from('tasks').select('*').eq('id', id).maybeSingle();
+      const courseIds = await getGlobalCourseIds();
+      if (courseIds.length === 0) return null;
+      const existingResult = await supabase.from('tasks').select('*').eq('id', id).in('course_id', courseIds).maybeSingle();
       throwIfError(existingResult.error, 'finding task');
       if (!existingResult.data) return null;
 
       const existing = toTask(existingResult.data);
+      if (updates.courseId) await requireGlobalCourse(updates.courseId);
       const result = await supabase.from('tasks').update(taskRecord({ ...existing, ...updates, id })).eq('id', id).select().single();
       throwIfError(result.error, 'updating task');
       return toTask(result.data);
     },
 
     async deleteTask(id) {
-      const result = await supabase.from('tasks').delete().eq('id', id);
+      const courseIds = await getGlobalCourseIds();
+      if (courseIds.length === 0) return;
+      const result = await supabase.from('tasks').delete().eq('id', id).in('course_id', courseIds);
       throwIfError(result.error, 'deleting task');
     },
 
@@ -250,15 +325,110 @@ export function createAcademicRepository() {
     },
 
     async reset() {
-      for (const table of ['materials', 'tasks', 'courses']) {
-        const result = await supabase.from(table).delete().neq('id', '');
-        throwIfError(result.error, `resetting ${table}`);
+      const courseIds = await getGlobalCourseIds();
+      if (courseIds.length > 0) {
+        for (const table of ['materials', 'tasks']) {
+          const result = await supabase.from(table).delete().in('course_id', courseIds);
+          throwIfError(result.error, `resetting ${table}`);
+        }
+      }
+      const coursesResult = await supabase.from('courses').delete().is('room_id', null);
+      throwIfError(coursesResult.error, 'resetting courses');
+
+      if (courseIds.length === 0) {
+        return this.updateUniInfo({
+          name: 'Academic Organizer',
+          currentSemester: 'Semester',
+          studentName: 'Student',
+        });
       }
       await this.updateUniInfo({
         name: 'Academic Organizer',
         currentSemester: 'Semester',
         studentName: 'Student',
       });
+    },
+
+    async getRoomAcademic(roomId, userId) {
+      await requireRoomMember(roomId, userId);
+      const coursesResult = await supabase.from('courses').select('*').eq('room_id', roomId).order('created_at', { ascending: false });
+      throwIfError(coursesResult.error, 'fetching room courses');
+      const courseIds = coursesResult.data.map(course => course.id);
+      if (courseIds.length === 0) return { courses: [], materials: [], tasks: [] };
+
+      const [materialsResult, tasksResult] = await Promise.all([
+        supabase.from('materials').select('*').in('course_id', courseIds).order('upload_date', { ascending: false }),
+        supabase.from('tasks').select('*').in('course_id', courseIds).order('created_at', { ascending: false }),
+      ]);
+      throwIfError(materialsResult.error, 'fetching room materials');
+      throwIfError(tasksResult.error, 'fetching room tasks');
+      return {
+        courses: coursesResult.data.map(toCourse),
+        materials: materialsResult.data.map(toMaterial),
+        tasks: tasksResult.data.map(toTask),
+      };
+    },
+
+    async createRoomCourse(roomId, userId, course) {
+      await requireRoomMember(roomId, userId);
+      const result = await supabase.from('courses').insert({ ...courseRecord(course), room_id: roomId }).select().single();
+      throwIfError(result.error, 'creating room course');
+      return toCourse(result.data);
+    },
+
+    async deleteRoomCourse(roomId, courseId, userId) {
+      await requireRoomCourse(roomId, courseId, userId);
+      const result = await supabase.from('courses').delete().eq('id', courseId).eq('room_id', roomId);
+      throwIfError(result.error, 'deleting room course');
+    },
+
+    async createRoomMaterial(roomId, userId, material) {
+      await requireRoomCourse(roomId, material.courseId, userId);
+      const result = await supabase.from('materials').insert(materialRecord(material)).select().single();
+      throwIfError(result.error, 'creating room material');
+      return toMaterial(result.data);
+    },
+
+    async deleteRoomMaterial(roomId, userId, materialId) {
+      await requireRoomMember(roomId, userId);
+      const courseIds = await getRoomCourseIds(roomId);
+      if (courseIds.length === 0) return;
+      const result = await supabase
+        .from('materials')
+        .delete()
+        .eq('id', materialId)
+        .in('course_id', courseIds);
+      throwIfError(result.error, 'deleting room material');
+    },
+
+    async createRoomTask(roomId, userId, task) {
+      await requireRoomCourse(roomId, task.courseId, userId);
+      const result = await supabase.from('tasks').insert(taskRecord(task)).select().single();
+      throwIfError(result.error, 'creating room task');
+      return toTask(result.data);
+    },
+
+    async updateRoomTask(roomId, userId, taskId, updates) {
+      await requireRoomMember(roomId, userId);
+      const roomCourses = await supabase.from('courses').select('id').eq('room_id', roomId);
+      throwIfError(roomCourses.error, 'finding room courses');
+      const courseIds = roomCourses.data.map(course => course.id);
+      const existingResult = await supabase.from('tasks').select('*').eq('id', taskId).in('course_id', courseIds).maybeSingle();
+      throwIfError(existingResult.error, 'finding room task');
+      if (!existingResult.data) return null;
+      const existing = toTask(existingResult.data);
+      await requireRoomCourse(roomId, updates.courseId || existing.courseId, userId);
+      const result = await supabase.from('tasks').update(taskRecord({ ...existing, ...updates, id: taskId })).eq('id', taskId).select().single();
+      throwIfError(result.error, 'updating room task');
+      return toTask(result.data);
+    },
+
+    async deleteRoomTask(roomId, userId, taskId) {
+      await requireRoomMember(roomId, userId);
+      const courseIds = await getRoomCourseIds(roomId);
+      if (courseIds.length === 0) return;
+      const result = await supabase.from('tasks').delete().eq('id', taskId).in('course_id', courseIds);
+      throwIfError(result.error, 'deleting room task');
     },
   };
 }

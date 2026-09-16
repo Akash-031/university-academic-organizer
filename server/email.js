@@ -1,53 +1,41 @@
-import nodemailer from 'nodemailer';
-
-let transporter;
+import { Resend } from 'resend';
 
 function getEmailConfig() {
-  const host = process.env.RESET_EMAIL_HOST;
-  if (!host) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
     if (process.env.NODE_ENV === 'production') {
       throw new Error('Password reset email delivery is not configured');
     }
     return null;
   }
 
-  const port = Number(process.env.RESET_EMAIL_PORT) || (process.env.NODE_ENV === 'production' ? 587 : 1025);
-  const user = process.env.RESET_EMAIL_USER;
-  const password = process.env.RESET_EMAIL_PASSWORD;
   const from = process.env.RESET_EMAIL_FROM;
   const frontendUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5173');
 
-  if (!from || !frontendUrl || (process.env.NODE_ENV === 'production' && (!user || !password))) {
+  if (!from || !frontendUrl) {
     throw new Error('Password reset email delivery is not fully configured');
   }
 
-  return { host, port, user, password, from, frontendUrl };
-}
-
-function getTransporter(config) {
-  if (!transporter) {
-    transporter = nodemailer.createTransport({
-      host: config.host,
-      port: config.port,
-      secure: config.port === 465,
-      auth: config.user && config.password ? { user: config.user, pass: config.password } : undefined,
-    });
-  }
-  return transporter;
+  return { apiKey, from, frontendUrl };
 }
 
 export async function sendPasswordResetEmail({ email, token }) {
   const config = getEmailConfig();
   if (!config) {
-    console.warn('Password reset email delivery is not configured; configure a local SMTP catcher for development testing.');
+    console.warn('Password reset email delivery is not configured; configure Resend for development testing.');
     return;
   }
 
   const resetUrl = `${config.frontendUrl.replace(/\/$/, '')}/reset-password?token=${encodeURIComponent(token)}`;
-  await getTransporter(config).sendMail({
+  const resend = new Resend(config.apiKey);
+  const { error } = await resend.emails.send({
     from: config.from,
     to: email,
     subject: 'Reset your Academic Organizer password',
     text: `Use this link to reset your password: ${resetUrl}\n\nThis link expires in 15 minutes and can only be used once.`,
   });
+
+  if (error) {
+    throw new Error('Password reset email delivery failed');
+  }
 }

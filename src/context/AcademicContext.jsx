@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { initialCourses, initialUniversityInfo } from '../data/courses';
 import { initialMaterials } from '../data/materials';
 import { initialTasks } from '../data/tasks';
@@ -16,6 +17,16 @@ import {
   migrateLocalDataApi,
   resetAllDataApi
 } from '../services/api';
+import {
+  fetchRoomAcademicApi,
+  createRoomCourseApi,
+  deleteRoomCourseApi,
+  createRoomMaterialApi,
+  deleteRoomMaterialApi,
+  createRoomTaskApi,
+  updateRoomTaskApi,
+  deleteRoomTaskApi,
+} from '../services/roomApi';
 
 const AcademicContext = createContext();
 
@@ -30,6 +41,8 @@ const STORAGE_KEYS = {
 const COURSE_COLORS = ['blue', 'purple', 'emerald', 'amber', 'cyan', 'rose', 'indigo'];
 
 export function AcademicProvider({ children }) {
+  const location = useLocation();
+  const roomId = location.pathname.match(/^\/rooms\/([^/]+)/)?.[1] || null;
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -80,8 +93,17 @@ export function AcademicProvider({ children }) {
   const [preselectedMaterialType, setPreselectedMaterialType] = useState('slide');
   const [viewingMaterial, setViewingMaterial] = useState(null);
 
+  useEffect(() => {
+    if (roomId) {
+      setCourses([]);
+      setMaterials([]);
+      setTasks([]);
+    }
+  }, [roomId]);
+
   // Keep localStorage updated as secondary cache
   useEffect(() => {
+    if (roomId) return;
     try {
       localStorage.setItem(STORAGE_KEYS.COURSES, JSON.stringify(courses));
     } catch (e) {
@@ -90,6 +112,7 @@ export function AcademicProvider({ children }) {
   }, [courses]);
 
   useEffect(() => {
+    if (roomId) return;
     try {
       localStorage.setItem(STORAGE_KEYS.MATERIALS, JSON.stringify(materials));
     } catch (e) {
@@ -98,6 +121,7 @@ export function AcademicProvider({ children }) {
   }, [materials]);
 
   useEffect(() => {
+    if (roomId) return;
     try {
       localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
     } catch (e) {
@@ -106,6 +130,7 @@ export function AcademicProvider({ children }) {
   }, [tasks]);
 
   useEffect(() => {
+    if (roomId) return;
     try {
       localStorage.setItem(STORAGE_KEYS.UNI_INFO, JSON.stringify(uniInfo));
     } catch (e) {
@@ -118,7 +143,14 @@ export function AcademicProvider({ children }) {
     try {
       if (isInitial) setIsLoading(true);
       setError(null);
-      const data = await fetchAllAcademicData();
+      const data = roomId ? await fetchRoomAcademicApi(roomId) : await fetchAllAcademicData();
+
+      if (roomId) {
+        setCourses(data.courses || []);
+        setMaterials(data.materials || []);
+        setTasks(data.tasks || []);
+        return;
+      }
 
       const dbHasData = (data.courses && data.courses.length > 0) ||
                         (data.materials && data.materials.length > 0) ||
@@ -152,7 +184,7 @@ export function AcademicProvider({ children }) {
     } finally {
       if (isInitial) setIsLoading(false);
     }
-  }, []);
+  }, [roomId]);
 
   // Fetch data on initial mount
   useEffect(() => {
@@ -195,7 +227,13 @@ export function AcademicProvider({ children }) {
     setCourses(prev => [newCourse, ...prev]);
 
     try {
-      await createCourseApi(newCourse);
+      const response = roomId
+        ? await createRoomCourseApi(roomId, newCourse)
+        : await createCourseApi(newCourse);
+      if (roomId && response.course) {
+        setCourses(prev => [response.course, ...prev.filter(course => course.id !== response.course.id)]);
+        return response.course;
+      }
     } catch (err) {
       console.error('Failed to create course on server', err);
     }
@@ -208,7 +246,8 @@ export function AcademicProvider({ children }) {
     setTasks(prev => prev.filter(t => t.courseId !== courseId));
 
     try {
-      await deleteCourseApi(courseId);
+      if (roomId) await deleteRoomCourseApi(roomId, courseId);
+      else await deleteCourseApi(courseId);
     } catch (err) {
       console.error('Failed to delete course on server', err);
     }
@@ -240,7 +279,13 @@ export function AcademicProvider({ children }) {
     setMaterials(prev => [newMaterial, ...prev]);
 
     try {
-      await createMaterialApi(newMaterial);
+      const response = roomId
+        ? await createRoomMaterialApi(roomId, newMaterial)
+        : await createMaterialApi(newMaterial);
+      if (roomId && response.material) {
+        setMaterials(prev => [response.material, ...prev.filter(material => material.id !== response.material.id)]);
+        return response.material;
+      }
     } catch (err) {
       console.error('Failed to create material on server', err);
     }
@@ -251,7 +296,8 @@ export function AcademicProvider({ children }) {
     setMaterials(prev => prev.filter(m => m.id !== materialId));
 
     try {
-      await deleteMaterialApi(materialId);
+      if (roomId) await deleteRoomMaterialApi(roomId, materialId);
+      else await deleteMaterialApi(materialId);
     } catch (err) {
       console.error('Failed to delete material on server', err);
     }
@@ -277,7 +323,13 @@ export function AcademicProvider({ children }) {
     setTasks(prev => [newTask, ...prev]);
 
     try {
-      await createTaskApi(newTask);
+      const response = roomId
+        ? await createRoomTaskApi(roomId, newTask)
+        : await createTaskApi(newTask);
+      if (roomId && response.task) {
+        setTasks(prev => [response.task, ...prev.filter(task => task.id !== response.task.id)]);
+        return response.task;
+      }
     } catch (err) {
       console.error('Failed to create task on server', err);
     }
@@ -302,7 +354,8 @@ export function AcademicProvider({ children }) {
 
     try {
       if (finalTaskObj) {
-        await updateTaskApi(taskId, finalTaskObj);
+        if (roomId) await updateRoomTaskApi(roomId, taskId, finalTaskObj);
+        else await updateTaskApi(taskId, finalTaskObj);
       }
     } catch (err) {
       console.error('Failed to update task on server', err);
@@ -320,7 +373,8 @@ export function AcademicProvider({ children }) {
     }));
 
     try {
-      await updateTaskApi(taskId, { status: newStatus });
+      if (roomId) await updateRoomTaskApi(roomId, taskId, { status: newStatus });
+      else await updateTaskApi(taskId, { status: newStatus });
     } catch (err) {
       console.error('Failed to toggle task status on server', err);
     }
@@ -330,7 +384,8 @@ export function AcademicProvider({ children }) {
     setTasks(prev => prev.filter(t => t.id !== taskId));
 
     try {
-      await deleteTaskApi(taskId);
+      if (roomId) await deleteRoomTaskApi(roomId, taskId);
+      else await deleteTaskApi(taskId);
     } catch (err) {
       console.error('Failed to delete task on server', err);
     }
@@ -501,6 +556,7 @@ export function AcademicProvider({ children }) {
         getMaterialsByCourseAndType,
         getTasksByCourse,
         resetAllData,
+        roomId,
       }}
     >
       {children}

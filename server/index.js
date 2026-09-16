@@ -22,6 +22,7 @@ const HOST = process.env.HOST || (process.env.RENDER || process.env.PORT ? '0.0.
 const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:3000',
   'http://localhost:3001',
+  'http://localhost:3002',
   'http://localhost:5173',
   'https://university-academic-organizer.onrender.com',
 ];
@@ -56,6 +57,10 @@ function authRepository() {
 
 function roomRepository() {
   return createRoomRepository();
+}
+
+function roomAcademicRepository() {
+  return createAcademicRepository();
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -402,6 +407,85 @@ app.get('/api/rooms/:roomId/members', requireAuth, async (req, res) => {
     res.json({ members });
   } catch (error) {
     sendDatabaseError(res, error, 'fetch room members');
+  }
+});
+
+// Room academic data routes. Membership is checked inside every repository operation.
+app.get('/api/rooms/:roomId/academic', requireAuth, async (req, res) => {
+  try {
+    res.json(await roomAcademicRepository().getRoomAcademic(req.params.roomId, req.userId));
+  } catch (error) {
+    if (error.code === 'ROOM_FORBIDDEN') return res.status(403).json({ error: error.message });
+    sendDatabaseError(res, error, 'fetch room academic data');
+  }
+});
+
+app.post('/api/rooms/:roomId/courses', requireAuth, async (req, res) => {
+  try {
+    res.status(201).json({ course: await roomAcademicRepository().createRoomCourse(req.params.roomId, req.userId, req.body) });
+  } catch (error) {
+    if (error.code === 'ROOM_FORBIDDEN') return res.status(403).json({ error: error.message });
+    sendDatabaseError(res, error, 'create room course');
+  }
+});
+
+app.delete('/api/rooms/:roomId/courses/:courseId', requireAuth, async (req, res) => {
+  try {
+    await roomAcademicRepository().deleteRoomCourse(req.params.roomId, req.params.courseId, req.userId);
+    res.json({ success: true });
+  } catch (error) {
+    if (error.code === 'ROOM_FORBIDDEN') return res.status(403).json({ error: error.message });
+    if (error.code === 'ROOM_COURSE_NOT_FOUND') return res.status(404).json({ error: error.message });
+    sendDatabaseError(res, error, 'delete room course');
+  }
+});
+
+app.post('/api/rooms/:roomId/materials', requireAuth, async (req, res) => {
+  try {
+    res.status(201).json({ material: await roomAcademicRepository().createRoomMaterial(req.params.roomId, req.userId, req.body) });
+  } catch (error) {
+    if (error.code === 'ROOM_FORBIDDEN' || error.code === 'ROOM_COURSE_NOT_FOUND') return res.status(403).json({ error: error.message });
+    sendDatabaseError(res, error, 'create room material');
+  }
+});
+
+app.delete('/api/rooms/:roomId/materials/:materialId', requireAuth, async (req, res) => {
+  try {
+    await roomAcademicRepository().deleteRoomMaterial(req.params.roomId, req.userId, req.params.materialId);
+    res.json({ success: true });
+  } catch (error) {
+    if (error.code === 'ROOM_FORBIDDEN') return res.status(403).json({ error: error.message });
+    sendDatabaseError(res, error, 'delete room material');
+  }
+});
+
+app.post('/api/rooms/:roomId/tasks', requireAuth, async (req, res) => {
+  try {
+    res.status(201).json({ task: await roomAcademicRepository().createRoomTask(req.params.roomId, req.userId, req.body) });
+  } catch (error) {
+    if (error.code === 'ROOM_FORBIDDEN' || error.code === 'ROOM_COURSE_NOT_FOUND') return res.status(403).json({ error: error.message });
+    sendDatabaseError(res, error, 'create room task');
+  }
+});
+
+app.put('/api/rooms/:roomId/tasks/:taskId', requireAuth, async (req, res) => {
+  try {
+    const task = await roomAcademicRepository().updateRoomTask(req.params.roomId, req.userId, req.params.taskId, req.body);
+    if (!task) return res.status(404).json({ error: 'Room task not found' });
+    res.json({ task });
+  } catch (error) {
+    if (error.code === 'ROOM_FORBIDDEN') return res.status(403).json({ error: error.message });
+    sendDatabaseError(res, error, 'update room task');
+  }
+});
+
+app.delete('/api/rooms/:roomId/tasks/:taskId', requireAuth, async (req, res) => {
+  try {
+    await roomAcademicRepository().deleteRoomTask(req.params.roomId, req.userId, req.params.taskId);
+    res.json({ success: true });
+  } catch (error) {
+    if (error.code === 'ROOM_FORBIDDEN') return res.status(403).json({ error: error.message });
+    sendDatabaseError(res, error, 'delete room task');
   }
 });
 

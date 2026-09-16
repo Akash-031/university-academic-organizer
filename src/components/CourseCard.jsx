@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { useAcademic } from '../context/AcademicContext';
 
-export default function CourseCard({ course }) {
+export default function CourseCard({ course, roomId = null }) {
   const navigate = useNavigate();
   const { openAddMaterialModal, materials } = useAcademic();
 
@@ -62,7 +62,7 @@ export default function CourseCard({ course }) {
 
   return (
     <div
-      onClick={() => navigate(`/courses/${course.id}`)}
+      onClick={() => navigate(roomId ? `/rooms/${roomId}/courses/${course.id}` : `/courses/${course.id}`)}
       className={`bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-lg transition-all duration-200 cursor-pointer flex flex-col justify-between overflow-hidden border-t-4 ${scheme.borderTop} ${scheme.hoverBorder} group`}
     >
       <div className="p-5">
@@ -127,7 +127,7 @@ export default function CourseCard({ course }) {
         <button
           onClick={(e) => {
             e.stopPropagation();
-            navigate(`/courses/${course.id}`);
+            navigate(roomId ? `/rooms/${roomId}/courses/${course.id}` : `/courses/${course.id}`);
           }}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-2xs transition-colors"
         >

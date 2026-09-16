@@ -21,7 +21,7 @@ import TaskCard from '../components/TaskCard';
 import { parseTaskDateTime, getTaskDeadlineInfo } from '../utils/taskUtils';
 
 export default function CourseDetails() {
-  const { courseId } = useParams();
+  const { roomId, courseId } = useParams();
   const navigate = useNavigate();
   const {
     getCourseById,
@@ -29,12 +29,17 @@ export default function CourseDetails() {
     getTasksByCourse,
     openAddMaterialModal,
     openAddTaskModal,
-    deleteCourse
+    deleteCourse,
+    isLoading
   } = useAcademic();
   const [activeTab, setActiveTab] = useState('slides');
   const [searchFilter, setSearchFilter] = useState('');
 
   const course = getCourseById(courseId);
+
+  if (!course && isLoading) {
+    return <div className="py-16 text-center text-sm text-slate-500">Loading course...</div>;
+  }
 
   if (!course) {
     return (
@@ -45,7 +50,7 @@ export default function CourseDetails() {
         <h2 className="text-lg font-bold text-slate-900">Course Not Found</h2>
         <p className="text-xs text-slate-500">The course you are looking for does not exist or has been removed.</p>
         <button
-          onClick={() => navigate('/courses')}
+          onClick={() => navigate(roomId ? `/rooms/${roomId}` : '/courses')}
           className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold shadow-xs hover:bg-blue-700"
         >
           Back to Courses
@@ -155,7 +160,7 @@ export default function CourseDetails() {
   const handleDeleteCourse = () => {
     if (window.confirm(`Are you sure you want to delete "${course.name}" (${course.code}) and all its uploaded materials and tasks?`)) {
       deleteCourse(course.id);
-      navigate('/courses');
+      navigate(roomId ? `/rooms/${roomId}` : '/courses');
     }
   };
 
@@ -163,7 +168,7 @@ export default function CourseDetails() {
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Visual Breadcrumb navigation (Important UX Requirement: Selected course clearly visible) */}
       <nav className="flex items-center gap-2 text-xs font-medium text-slate-500 bg-white px-4 py-2.5 rounded-xl border border-slate-200/80 shadow-2xs">
-        <Link to="/courses" className="hover:text-blue-600 flex items-center gap-1 font-semibold text-slate-600">
+        <Link to={roomId ? `/rooms/${roomId}` : '/courses'} className="hover:text-blue-600 flex items-center gap-1 font-semibold text-slate-600">
           <BookOpen className="w-3.5 h-3.5 text-blue-600" />
           <span>Courses</span>
         </Link>

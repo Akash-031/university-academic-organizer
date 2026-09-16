@@ -96,6 +96,11 @@ CREATE INDEX IF NOT EXISTS rooms_room_code_idx ON public.rooms(room_code);
 CREATE INDEX IF NOT EXISTS room_members_room_id_idx ON public.room_members(room_id);
 CREATE INDEX IF NOT EXISTS room_members_user_id_idx ON public.room_members(user_id);
 
+ALTER TABLE public.courses
+  ADD COLUMN IF NOT EXISTS room_id TEXT REFERENCES public.rooms(id) ON DELETE CASCADE;
+
+CREATE INDEX IF NOT EXISTS courses_room_id_idx ON public.courses(room_id);
+
 -- Password reset tokens are stored as hashes and are invalidated after use.
 CREATE TABLE IF NOT EXISTS public.password_reset_tokens (
   id TEXT PRIMARY KEY,

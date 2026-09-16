@@ -4,7 +4,7 @@ import { X, BookOpen, Plus, AlertCircle, Check } from 'lucide-react';
 import { useAcademic } from '../context/AcademicContext';
 
 export default function AddCourseModal() {
-  const { isAddCourseModalOpen, closeAddCourseModal, addCourse } = useAcademic();
+  const { isAddCourseModalOpen, closeAddCourseModal, addCourse, roomId } = useAcademic();
   const navigate = useNavigate();
 
   const [name, setName] = useState('');
@@ -47,6 +47,7 @@ export default function AddCourseModal() {
     closeAddCourseModal();
     if (created && created.id) {
       navigate(`/courses/${created.id}`);
+        navigate(roomId ? `/rooms/${roomId}/courses/${created.id}` : `/courses/${created.id}`);
     }
   };
 
